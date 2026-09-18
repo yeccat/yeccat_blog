@@ -188,7 +188,8 @@ import { withBase } from '../../utils/url';
           }
           const posts: PostMeta[] = [];
           await Promise.all(mdPaths.map(async (p) => {
-            const slug = p.split('/')[2];
+            // 路径形如 src/data/blog/<slug>/index.md
+            const slug = p.split('/')[3];
             const f = await api(`/contents/${p}?ref=${BRANCH}`);
             const text = new TextDecoder().decode(Uint8Array.from(atob(f.content.replace(/\n/g, '')), (c) => c.charCodeAt(0)));
             posts.push(parseMeta(slug, f.sha, text));

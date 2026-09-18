@@ -11,7 +11,8 @@ import { withBase } from '../../utils/url';
     <meta name="robots" content="noindex" />
     <link rel="icon" type="image/svg+xml" href={withBase('/favicon.svg')} />
     <title>写文章 — yeccat.blog</title>
-    <style>
+    <!-- is:global：编辑区内的标题等节点是运行时动态生成的，没有 Astro scoped 属性 -->
+    <style is:global>
       /* 所见即所得编辑区：空内容时显示提示 */
       .wysiwyg:empty::before {
         content: attr(data-placeholder);
@@ -61,8 +62,8 @@ import { withBase } from '../../utils/url';
         user-select: none;
       }
       .tool-btn:hover { background: #f3f4f6; }
-      :global(.dark) .tool-btn { color: #d1d5db; }
-      :global(.dark) .tool-btn:hover { background: #1f2937; }
+      .dark .tool-btn { color: #d1d5db; }
+      .dark .tool-btn:hover { background: #1f2937; }
     </style>
   </head>
   <body class="min-h-screen bg-gray-50 text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100">
@@ -318,6 +319,8 @@ import { withBase } from '../../utils/url';
       tagInput.addEventListener('blur', flushTagInput);
 
       // ---------- 所见即所得工具栏 ----------
+      // 回车生成 <p>（默认的 <div> 转出 Markdown 会丢段落空行）
+      document.execCommand('defaultParagraphSeparator', false, 'p');
       const exec = (command: string, value?: string) => {
         editor.focus();
         document.execCommand(command, false, value);
