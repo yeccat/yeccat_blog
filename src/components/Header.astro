@@ -23,36 +23,49 @@ const isActive = (href: string) =>
       yeccat<span class="text-indigo-600 dark:text-indigo-400">.blog</span>
     </a>
 
-    <!-- 桌面端导航 -->
-    <ul class="hidden items-center gap-6 sm:flex">
-      {navLinks.map((link) => (
-        <li>
-          <a
-            href={link.href}
-            class:list={[
-              'text-sm font-medium transition-colors',
-              isActive(link.href)
-                ? 'text-indigo-600 dark:text-indigo-400'
-                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100',
-            ]}
-          >
-            {link.label}
-          </a>
-        </li>
-      ))}
-    </ul>
+    <div class="flex items-center gap-2 sm:gap-4">
+      <!-- 桌面端导航 -->
+      <ul class="hidden items-center gap-6 sm:flex">
+        {navLinks.map((link) => (
+          <li>
+            <a
+              href={link.href}
+              class:list={[
+                'text-sm font-medium transition-colors',
+                isActive(link.href)
+                  ? 'text-indigo-600 dark:text-indigo-400'
+                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100',
+              ]}
+            >
+              {link.label}
+            </a>
+          </li>
+        ))}
+      </ul>
 
-    <!-- 移动端汉堡菜单按钮 -->
-    <button
-      id="menu-toggle"
-      class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 sm:hidden dark:text-gray-400 dark:hover:bg-gray-800"
-      aria-label="切换菜单"
-      aria-expanded="false"
-    >
-      <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
-      </svg>
-    </button>
+      <!-- 写文章 -->
+      <a
+        href={withBase('/write/')}
+        class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+      >
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+        </svg>
+        <span class="hidden sm:inline">写文章</span>
+      </a>
+
+      <!-- 移动端汉堡菜单按钮 -->
+      <button
+        id="menu-toggle"
+        class="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 sm:hidden dark:text-gray-400 dark:hover:bg-gray-800"
+        aria-label="切换菜单"
+        aria-expanded="false"
+      >
+        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+        </svg>
+      </button>
+    </div>
   </nav>
 
   <!-- 移动端下拉菜单 -->
