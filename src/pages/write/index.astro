@@ -557,11 +557,14 @@ import { withBase } from '../../utils/url';
         }
       });
 
-      // Ctrl+Y / Ctrl+Shift+Z 重做（Ctrl+Z 撤销由浏览器原生支持）
+      // 快捷键：Ctrl+Z 撤销、Ctrl+Y / Ctrl+Shift+Z 重做（显式绑定，避免个别环境吞掉原生快捷键）
       editor.addEventListener('keydown', (e) => {
         if (!(e.ctrlKey || e.metaKey)) return;
         const k = e.key.toLowerCase();
-        if (k === 'y' || (e.shiftKey && k === 'z')) {
+        if (k === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          exec('undo');
+        } else if (k === 'y' || (e.shiftKey && k === 'z')) {
           e.preventDefault();
           exec('redo');
         }
