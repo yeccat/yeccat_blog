@@ -228,15 +228,21 @@ import { withBase } from '../../utils/url';
         });
       }
 
+      const flushTagInput = () => {
+        const v = tagInput.value.trim().replace(/^,|,$/g, '');
+        if (v && !tags.includes(v)) tags.push(v);
+        tagInput.value = '';
+        renderTags();
+      };
+
       tagInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ',') {
           e.preventDefault();
-          const v = tagInput.value.trim().replace(/^,|,$/g, '');
-          if (v && !tags.includes(v)) tags.push(v);
-          tagInput.value = '';
-          renderTags();
+          flushTagInput();
         }
       });
+      // 失焦或点击发布时，自动把已输入但未回车的文字收集为标签
+      tagInput.addEventListener('blur', flushTagInput);
 
       // ---------- 预览 ----------
       let previewing = false;
@@ -253,26 +259,50 @@ import { withBase } from '../../utils/url';
       });
 
       // ---------- 简易格式工具 ----------
+      const insertAtSelection = (before: string, text: string, after: string) => {
+        const ta = contentEl;
+        const start = ta.selectionStart;
+        ta.value = ta.value.slice(0, start) + before + text + after + ta.value.slice(ta.selectionEnd);
+        ta.focus();
+        ta.setSelectionRange(start + before.length, start + before.length + text.length);
+        if (previewing) renderPreview();
+      };
+
       document.querySelectorAll<HTMLButtonElement>('[data-fmt]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const kind = btn.dataset.fmt;
           const ta = contentEl;
           const start = ta.selectionStart;
           const end = ta.selectionEnd;
-          const sel = ta.value.slice(start, end) || '文字';
+          const sel = ta.value.slice(start, end);
+
+          if (kind === 'link') {
+            let url: string | null;
+            let text: string;
+            if (/^https?:\/\/\S+$/.test(sel.trim())) {
+              // 选中的本身就是网址
+              url = sel.trim();
+              text = sel.trim();
+            } else {
+              url = window.prompt('输入链接地址：', 'https://');
+              if (url === null) return;
+              url = url.trim();
+              if (!url) return;
+              text = sel || '链接文字';
+            }
+            insertAtSelection('[', `${text}](${url})`, '');
+            return;
+          }
+
           const wrap: Record<string, [string, string]> = {
             bold: ['**', '**'],
             italic: ['*', '*'],
             code: ['\n```\n', '\n```\n'],
             quote: ['\n> ', '\n'],
             heading: ['\n## ', '\n'],
-            link: ['[', '](https://)'],
           };
           const [a, b] = wrap[kind!];
-          ta.value = ta.value.slice(0, start) + a + sel + b + ta.value.slice(end);
-          ta.focus();
-          ta.setSelectionRange(start + a.length, start + a.length + sel.length);
-          if (previewing) renderPreview();
+          insertAtSelection(a, sel || '文字', b);
         });
       });
 
@@ -428,9 +458,23 @@ import { withBase } from '../../utils/url';
       }
 
       // ---------- GitHub API ----------
+      // 仅对“网络层错误”（Failed to fetch / 连接中断）重试；HTTP 4xx/5xx 不重试
+      async function fetchRetry(input: string, init: RequestInit, retries = 2) {
+        let lastErr: unknown;
+        for (let i = 0; i <= retries; i++) {
+          try {
+            return await fetch(input, init);
+          } catch (e) {
+            lastErr = e;
+            if (i < retries) await sleep(900 * (i + 1));
+          }
+        }
+        throw lastErr;
+      }
+
       async function githubRequest(path: string, opts: RequestInit = {}) {
         const token = localStorage.getItem(TOKEN_KEY)!;
-        const r = await fetch(`https://api.github.com${path}`, {
+        const r = await fetchRetry(`${API}${path}`, {
           ...opts,
           headers: {
             Authorization: `Bearer ${token}`,
@@ -457,15 +501,28 @@ import { withBase } from '../../utils/url';
       ) {
         const body: Record<string, unknown> = { message, content: contentBase64, branch: BRANCH };
         if (sha) body.sha = sha;
-        const r = await fetch(`${API}/contents/${path}`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        });
+        let r: Response;
+        try {
+          r = await fetchRetry(`${API}/contents/${path}`, {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          });
+        } catch {
+          // 请求发出但响应丢失时，文件可能其实已经提交成功。
+          // 查询该文件最近一次提交：拿到真实 commit sha 后视为成功，避免重复提交产生副本。
+          try {
+            const commits = await githubRequest(`/commits?path=${encodeURIComponent(path)}&per_page=1`);
+            if (Array.isArray(commits) && commits[0]) {
+              return { commit: { sha: commits[0].sha }, possiblyCommitted: true };
+            }
+          } catch {}
+          throw new Error('网络中断，且无法确认提交是否成功，请稍后刷新文章列表核对');
+        }
         if (!r.ok) {
           let msg = `HTTP ${r.status}`;
           try {
@@ -487,7 +544,11 @@ import { withBase } from '../../utils/url';
       // ---------- 发布 ----------
       btnPublish.addEventListener('click', publish);
 
+      // 会话内固定自动生成的 slug，避免网络重试/多次点击产生多篇重复文章
+      let sessionSlug = '';
+
       async function publish() {
+        flushTagInput();
         const title = titleEl.value.trim();
         const content = contentEl.value.trim();
         if (!title) return alert('请填写标题');
@@ -500,7 +561,8 @@ import { withBase } from '../../utils/url';
           return;
         }
 
-        const slug = (slugEl.value.trim() || autoSlug()).replace(/^\/+|\/+$/g, '');
+        const slug = (slugEl.value.trim() || sessionSlug || autoSlug()).replace(/^\/+|\/+$/g, '');
+        sessionSlug = slug;
         if (!/^[a-zA-Z0-9_-]+$/.test(slug)) return alert('slug 只能包含字母、数字、连字符和下划线');
         const filePath = `src/data/blog/${slug}/index.md`;
 
@@ -516,8 +578,9 @@ import { withBase } from '../../utils/url';
               setStatus('已取消。');
               return;
             }
-          } catch {
-            // 404 = 新文章
+          } catch (e) {
+            // 仅 404 视为“新文章”；网络错误等应中止
+            if ((e as Error).message !== 'Not Found' && !(e as Error).message.includes('404')) throw e;
           }
 
           // 2) 上传封面
@@ -542,7 +605,8 @@ import { withBase } from '../../utils/url';
             `title: ${yamlStr(title)}`,
             `description: ${yamlStr(descEl.value.trim() || title)}`,
             `pubDatetime: ${pub}`,
-            'tags:',
+            // 无标签时必须输出空数组，`tags:` 裸键会被 YAML 解析为 null 导致构建失败
+            tags.length ? 'tags:' : 'tags: []',
             ...tags.map((t) => `  - ${yamlStr(t)}`),
             `draft: ${draftEl.checked}`,
             ...(coverPath ? [`cover: ${coverPath}`] : []),
@@ -563,46 +627,64 @@ import { withBase } from '../../utils/url';
           const sha: string = committed.commit.sha;
           setStatus(`已提交（${sha.slice(0, 7)}），等待 GitHub Actions 构建部署，通常需要 1 分钟左右…`);
 
-          // 5) 轮询部署状态
+          // 5) 轮询部署状态（查询过程中网络抖动不影响“文章已提交”的事实）
+          const articleUrl = baseUrl(`/blog/${slug}/`);
           let runId: number | null = null;
-          for (let i = 0; i < 12; i++) {
+          for (let i = 0; i < 14; i++) {
             await sleep(5000);
-            const runs = await githubRequest(`/actions/runs?event=push&per_page=10`);
-            const run = runs.workflow_runs.find(
-              (r: { head_sha: string; path: string }) => r.head_sha === sha && r.path.includes('deploy.yml'),
-            );
-            if (run) {
-              runId = run.id;
-              break;
+            try {
+              const runs = await githubRequest(`/actions/runs?event=push&per_page=10`);
+              const run = runs.workflow_runs.find(
+                (r: { head_sha: string; path: string }) => r.head_sha === sha && r.path.includes('deploy.yml'),
+              );
+              if (run) {
+                runId = run.id;
+                break;
+              }
+            } catch {
+              // 单次查询失败，继续下一轮
             }
           }
           if (!runId) {
             setStatus(
-              `文章已提交，但未检测到部署任务。可稍后访问：<a class="text-indigo-600 underline" href="${baseUrl(`/blog/${slug}/`)}">${baseUrl(`/blog/${slug}/`)}</a>`,
+              draftEl.checked
+                ? '文章已提交，部署任务稍后会自动运行。'
+                : `文章已提交，正在后台部署（约 1 分钟）。<a class="text-indigo-600 underline" href="${articleUrl}">稍后点此查看</a>`,
               'ok',
             );
             return;
           }
-          for (let i = 0; i < 36; i++) {
+          for (let i = 0; i < 40; i++) {
             await sleep(5000);
-            const run = await githubRequest(`/actions/runs/${runId}`);
-            if (run.status === 'completed') {
-              if (run.conclusion === 'success') {
-                const url = baseUrl(`/blog/${slug}/`);
-                setStatus(
-                  draftEl.checked
-                    ? `部署完成。文章已设为隐藏，线上暂不展示。`
-                    : `🎉 发布成功！<a class="text-indigo-600 underline" href="${url}">点此查看文章</a>`,
-                  'ok',
-                );
-              } else {
-                setStatus(`部署失败（${run.conclusion}），请到 GitHub Actions 查看日志。`, 'err');
+            try {
+              const run = await githubRequest(`/actions/runs/${runId}`);
+              if (run.status === 'completed') {
+                if (run.conclusion === 'success') {
+                  setStatus(
+                    draftEl.checked
+                      ? '部署完成。文章已设为隐藏，线上暂不展示。'
+                      : `🎉 发布成功！<a class="text-indigo-600 underline" href="${articleUrl}">点此查看文章</a>`,
+                    'ok',
+                  );
+                } else {
+                  setStatus(
+                    `文章已保存，但本次构建失败（${run.conclusion}）。<a class="text-indigo-600 underline" href="https://github.com/${OWNER}/${REPO}/actions/runs/${runId}" target="_blank" rel="noopener">查看构建日志</a>`,
+                    'err',
+                  );
+                }
+                return;
               }
-              return;
+              setStatus(`正在构建部署中…（${(i + 1) * 5}s）`);
+            } catch {
+              setStatus(`正在构建部署中…（查询波动，继续等待 ${(i + 1) * 5}s）`);
             }
-            setStatus(`正在构建部署中…（${(i + 1) * 5}s）`);
           }
-          setStatus('部署超时，请稍后到 Actions 页面确认。', 'err');
+          setStatus(
+            draftEl.checked
+              ? '文章已提交，部署仍在进行，可稍后到 Actions 页面确认。'
+              : `文章已提交，部署仍在进行。<a class="text-indigo-600 underline" href="${articleUrl}">稍后点此查看</a>`,
+            'ok',
+          );
         } catch (e) {
           setStatus(`发布失败：${(e as Error).message}`, 'err');
         } finally {

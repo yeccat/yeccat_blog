@@ -9,7 +9,8 @@ const blog = defineCollection({
     pubDatetime: z.coerce.date(),
     modDatetime: z.coerce.date().optional(),
     draft: z.boolean().default(false),
-    tags: z.array(z.string()).default([]),
+    // 兼容 frontmatter 中 `tags:`（YAML 解析为 null）等情况，统一兜底为空数组
+    tags: z.preprocess((v) => (Array.isArray(v) ? v : []), z.array(z.string())),
     cover: z.string().optional(),
     ogImage: z.string().optional(),
   }),
