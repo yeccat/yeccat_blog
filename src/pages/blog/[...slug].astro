@@ -1,6 +1,7 @@
 ---
 import { getCollection, render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { withBase } from '../../utils/url';
 
 export async function getStaticPaths() {
   const posts = (await getCollection('blog')).filter(
@@ -49,7 +50,7 @@ const formattedDate = pubDatetime.toLocaleDateString('zh-CN', {
   </article>
 
   <nav class="mt-12 border-t border-gray-200 pt-6 dark:border-gray-800">
-    <a href="/blog/" class="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+    <a href={withBase('/blog/')} class="text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400">
       ← 返回文章列表
     </a>
   </nav>

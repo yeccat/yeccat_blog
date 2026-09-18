@@ -1,5 +1,6 @@
 ---
 import type { CollectionEntry } from 'astro:content';
+import { withBase } from '../utils/url';
 
 interface Props {
   post: CollectionEntry<'blog'>;
@@ -15,7 +16,7 @@ const formattedDate = pubDatetime.toLocaleDateString('zh-CN', {
 ---
 
 <article class="group rounded-xl border border-gray-200 p-5 transition-shadow hover:shadow-md dark:border-gray-800">
-  <a href={`/blog/${post.id}/`} class="block">
+  <a href={withBase(`/blog/${post.id}/`)} class="block">
     <h2 class="text-lg font-bold tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
       {title}
     </h2>
