@@ -1,0 +1,281 @@
+---
+import '../../styles/global.css';
+import { withBase } from '../../utils/url';
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" type="image/svg+xml" href={withBase('/favicon.svg')} />
+    <title>管理文章 — yeccat.blog</title>
+  </head>
+  <body class="min-h-screen bg-gray-50 text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100">
+    <header class="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-950/90">
+      <div class="mx-auto flex max-w-4xl items-center justify-between gap-2 px-4 py-3">
+        <div class="flex items-center gap-3">
+          <a href={withBase('/')} class="text-lg font-bold tracking-tight">
+            yeccat<span class="text-indigo-600 dark:text-indigo-400">.blog</span>
+          </a>
+          <span class="hidden text-sm text-gray-400 sm:inline">管理文章</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href={withBase('/write/')} class="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700">写文章</a>
+          <button id="btn-key" type="button" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+            <span id="key-label">导入密钥</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-4xl px-4 py-6">
+      <div id="status" class="hidden rounded-xl border border-gray-200 bg-white p-4 text-sm dark:border-gray-800 dark:bg-gray-900"></div>
+      <div id="empty-tip" class="hidden mt-6 rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900"></div>
+      <div id="list" class="mt-6 space-y-4"></div>
+    </main>
+
+    <!-- 密钥弹窗 -->
+    <div id="key-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 px-4">
+      <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+        <h3 class="text-lg font-bold">导入 GitHub 密钥</h3>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          管理文章（读取列表、删除）需要密钥。密钥只保存在当前浏览器（localStorage），仅发送给 api.github.com。
+        </p>
+        <ol class="mt-3 list-decimal space-y-1 pl-5 text-xs text-gray-500 dark:text-gray-400">
+          <li>GitHub「Settings → Developer settings → Fine-grained tokens」生成令牌</li>
+          <li>Repository access 只选 <code class="rounded bg-gray-100 px-1 dark:bg-gray-800">yeccat_blog</code></li>
+          <li>权限：Contents = Read and write，Actions = Read-only</li>
+          <li>复制令牌（github_pat_ 开头）粘贴到下方</li>
+        </ol>
+        <input
+          id="key-input"
+          type="password"
+          placeholder="github_pat_xxxxxxxxxxxx"
+          class="mt-4 w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-950"
+        />
+        <p id="key-error" class="mt-2 hidden text-xs text-red-500"></p>
+        <div class="mt-4 flex justify-end gap-2">
+          <button id="key-cancel" type="button" class="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">取消</button>
+          <button id="key-save" type="button" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">验证并保存</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const OWNER = 'yeccat';
+      const REPO = 'yeccat_blog';
+      const BRANCH = 'main';
+      const API = `https://api.github.com/repos/${OWNER}/${REPO}`;
+      const TOKEN_KEY = 'yeccat_blog_gh_token';
+      const BASE = import.meta.env.BASE_URL;
+      const siteUrl = (p: string) => `${BASE}${p.replace(/^\/+/, '')}`;
+
+      const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+      const statusEl = $('status');
+      const listEl = $('list');
+      const emptyTip = $('empty-tip');
+      const modal = $('key-modal');
+      const keyInput = $<HTMLInputElement>('key-input');
+      const keyError = $('key-error');
+      const keyLabel = $('key-label');
+      const btnKey = $<HTMLButtonElement>('btn-key');
+
+      interface PostMeta {
+        slug: string;
+        title: string;
+        date: string;
+        draft: boolean;
+        cover: string;
+        tags: string[];
+        mdSha: string;
+      }
+
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      function setStatus(html: string, tone: 'info' | 'ok' | 'err' = 'info') {
+        statusEl.classList.remove('hidden', 'border-red-300', 'border-green-300', 'border-gray-200');
+        statusEl.classList.add(tone === 'err' ? 'border-red-300' : tone === 'ok' ? 'border-green-300' : 'border-gray-200');
+        statusEl.innerHTML = html;
+      }
+      function authHeaders() {
+        const t = localStorage.getItem(TOKEN_KEY);
+        return t ? { Authorization: `Bearer ${t}`, Accept: 'application/vnd.github+json' } : { Accept: 'application/vnd.github+json' };
+      }
+      async function api(path: string, init: RequestInit = {}) {
+        const r = await fetch(`${API}${path}`, { ...init, headers: { ...authHeaders(), ...(init.headers ?? {}) } });
+        if (!r.ok) {
+          let msg = `HTTP ${r.status}`;
+          try { msg = (await r.json()).message ?? msg; } catch {}
+          const err = new Error(msg);
+          (err as Error & { status?: number }).status = r.status;
+          throw err;
+        }
+        return r.status === 204 ? null : r.json();
+      }
+
+      // ---------- 密钥弹窗 ----------
+      function openModal() {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        keyInput.value = localStorage.getItem(TOKEN_KEY) ?? '';
+        keyError.classList.add('hidden');
+        keyInput.focus();
+      }
+      function closeModal() { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+      btnKey.addEventListener('click', openModal);
+      $('key-cancel').addEventListener('click', closeModal);
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+      $('key-save').addEventListener('click', async () => {
+        const token = keyInput.value.trim();
+        keyError.classList.add('hidden');
+        if (!token) { keyError.textContent = '请粘贴令牌'; keyError.classList.remove('hidden'); return; }
+        try {
+          const r = await fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
+          if (!r.ok) throw new Error(`令牌无效（${r.status}）`);
+          const u = await r.json();
+          localStorage.setItem(TOKEN_KEY, token);
+          keyLabel.textContent = `密钥：${u.login}`;
+          closeModal();
+          loadPosts();
+        } catch (e) {
+          keyError.textContent = `验证失败：${(e as Error).message}`;
+          keyError.classList.remove('hidden');
+        }
+      });
+
+      // ---------- 读取文章列表 ----------
+      function parseMeta(slug: string, mdSha: string, text: string): PostMeta {
+        const meta: Record<string, string> = {};
+        const tags: string[] = [];
+        const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+        if (fm) {
+          for (const line of fm[1].split(/\r?\n/)) {
+            const m = line.match(/^([a-zA-Z]+):\s*(.*)$/);
+            if (m) meta[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+          }
+          const inList = fm[1].match(/tags:\r?\n((?:\s*-\s*.+\r?\n?)*)/);
+          if (inList) tags.push(...inList[1].split(/\r?\n/).map((s) => s.replace(/^\s*-\s*/, '').replace(/["']/g, '').trim()).filter(Boolean));
+          else if (meta.tags && meta.tags.startsWith('[')) tags.push(...meta.tags.replace(/[[\]'"]/g, '').split(',').map((s) => s.trim()).filter(Boolean));
+        }
+        return {
+          slug,
+          title: meta.title || slug,
+          date: meta.pubDatetime || '',
+          draft: meta.draft === 'true',
+          cover: meta.cover || '',
+          tags,
+          mdSha,
+        };
+      }
+
+      async function loadPosts() {
+        listEl.innerHTML = '';
+        emptyTip.classList.add('hidden');
+        setStatus('正在加载文章列表…');
+        try {
+          // 一次递归拿到全部文件路径
+          const tree = await api(`/git/trees/${BRANCH}?recursive=1`);
+          const mdPaths = (tree.tree as Array<{ path: string; type: string }>)
+            .filter((f) => f.type === 'blob' && /^src\/data\/blog\/[^/]+\/index\.md$/.test(f.path))
+            .map((f) => f.path);
+          if (!mdPaths.length) {
+            statusEl.classList.add('hidden');
+            emptyTip.textContent = '还没有文章，去写第一篇吧。';
+            emptyTip.classList.remove('hidden');
+            return;
+          }
+          const posts: PostMeta[] = [];
+          await Promise.all(mdPaths.map(async (p) => {
+            const slug = p.split('/')[2];
+            const f = await api(`/contents/${p}?ref=${BRANCH}`);
+            const text = new TextDecoder().decode(Uint8Array.from(atob(f.content.replace(/\n/g, '')), (c) => c.charCodeAt(0)));
+            posts.push(parseMeta(slug, f.sha, text));
+          }));
+          posts.sort((a, b) => (a.date < b.date ? 1 : -1));
+          renderPosts(posts);
+          setStatus(`共 ${posts.length} 篇文章。`, 'ok');
+        } catch (e) {
+          setStatus(`加载失败：${(e as Error).message}。若未导入密钥，请先点右上角“导入密钥”。`, 'err');
+        }
+      }
+
+      function renderPosts(posts: PostMeta[]) {
+        listEl.innerHTML = '';
+        for (const p of posts) {
+          const card = document.createElement('div');
+          card.className = 'flex gap-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
+          const date = p.date ? p.date.replace('T', ' ').slice(0, 16) : '无日期';
+          const tagsHtml = p.tags.map((t) => `<span class="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">${esc(t)}</span>`).join('');
+          card.innerHTML = `
+            ${p.cover
+              ? `<img src="${siteUrl(p.cover)}" alt="" class="hidden h-20 w-32 shrink-0 rounded-lg border border-gray-200 object-cover sm:block dark:border-gray-800" loading="lazy" />`
+              : `<div class="hidden h-20 w-32 shrink-0 rounded-lg border border-dashed border-gray-300 sm:block dark:border-gray-700"></div>`}
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <a href="${siteUrl(`/blog/${p.slug}/`)}" class="truncate font-semibold hover:text-indigo-600">${esc(p.title)}</a>
+                ${p.draft ? '<span class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">隐藏</span>' : ''}
+              </div>
+              <p class="mt-1 truncate text-xs text-gray-500">${date} · ${esc(p.slug)}</p>
+              <div class="mt-2 flex flex-wrap gap-1">${tagsHtml}</div>
+            </div>
+            <div class="flex shrink-0 flex-col gap-2 text-sm">
+              <a href="${siteUrl(`/write/?slug=${encodeURIComponent(p.slug)}`)}" class="rounded-lg border border-gray-300 px-3 py-1 text-center hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800">编辑</a>
+              <button type="button" data-del="${esc(p.slug)}" data-cover="${esc(p.cover)}" class="rounded-lg border border-red-200 px-3 py-1 text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950">删除</button>
+            </div>`;
+          listEl.appendChild(card);
+        }
+        listEl.querySelectorAll<HTMLButtonElement>('button[data-del]').forEach((btn) => {
+          btn.addEventListener('click', () => deletePost(btn.dataset.del!, btn.dataset.cover || ''));
+        });
+      }
+
+      // ---------- 删除：用 Git Trees API 一次提交删除 md + 封面 ----------
+      async function deletePost(slug: string, cover: string) {
+        if (!localStorage.getItem(TOKEN_KEY)) { openModal(); return; }
+        if (!window.confirm(`确定删除文章「${slug}」吗？此操作会立即提交到仓库，无法在网页端恢复。`)) return;
+        setStatus(`正在删除 ${slug}…`);
+        try {
+          const paths = [`src/data/blog/${slug}/index.md`];
+          if (cover) paths.push(`public${cover.startsWith('/') ? cover : `/${cover}`}`);
+          const ref = await api(`/git/ref/heads/${BRANCH}`);
+          const parentSha: string = ref.object.sha;
+          const parent = await api(`/git/commits/${parentSha}`);
+          const tree = await api('/git/trees', {
+            method: 'POST',
+            body: JSON.stringify({
+              base_tree: parent.tree.sha,
+              tree: paths.map((path) => ({ path, mode: '100644', type: 'blob', sha: null })),
+            }),
+          });
+          const commit = await api('/git/commits', {
+            method: 'POST',
+            body: JSON.stringify({ message: `删除文章：${slug}`, tree: tree.sha, parents: [parentSha] }),
+          });
+          await api(`/git/refs/heads/${BRANCH}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ sha: commit.sha, force: false }),
+          });
+          setStatus(`已删除「${esc(slug)}」，线上页面约 1 分钟后更新。`, 'ok');
+          await sleep(800);
+          loadPosts();
+        } catch (e) {
+          setStatus(`删除失败：${(e as Error).message}`, 'err');
+        }
+      }
+
+      // ---------- 初始化 ----------
+      {
+        const t = localStorage.getItem(TOKEN_KEY);
+        if (t) {
+          fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${t}` } })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((u) => { if (u?.login) keyLabel.textContent = `密钥：${u.login}`; })
+            .catch(() => {});
+        }
+        loadPosts();
+      }
+    </script>
+  </body>
+</html>

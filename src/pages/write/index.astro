@@ -11,21 +11,76 @@ import { withBase } from '../../utils/url';
     <meta name="robots" content="noindex" />
     <link rel="icon" type="image/svg+xml" href={withBase('/favicon.svg')} />
     <title>写文章 — yeccat.blog</title>
+    <style>
+      /* 所见即所得编辑区：空内容时显示提示 */
+      .wysiwyg:empty::before {
+        content: attr(data-placeholder);
+        color: #9ca3af;
+        pointer-events: none;
+      }
+      .wysiwyg img {
+        max-width: 100%;
+        border-radius: 0.5rem;
+        margin: 0.75rem 0;
+        cursor: default;
+      }
+      .wysiwyg h1 { font-size: 1.875rem; font-weight: 700; margin: 1rem 0 0.5rem; }
+      .wysiwyg h2 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; }
+      .wysiwyg h3 { font-size: 1.25rem; font-weight: 700; margin: 0.75rem 0 0.5rem; }
+      .wysiwyg p { margin: 0.5rem 0; }
+      .wysiwyg ul { list-style: disc; padding-left: 1.5rem; margin: 0.5rem 0; }
+      .wysiwyg ol { list-style: decimal; padding-left: 1.5rem; margin: 0.5rem 0; }
+      .wysiwyg blockquote {
+        border-left: 4px solid #d1d5db;
+        padding-left: 1rem;
+        color: #4b5563;
+        font-style: italic;
+        margin: 0.75rem 0;
+      }
+      .wysiwyg pre {
+        background: #111827;
+        color: #f3f4f6;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        overflow-x: auto;
+        font-family: ui-monospace, monospace;
+        font-size: 0.875rem;
+        margin: 0.75rem 0;
+      }
+      .wysiwyg a { color: #4f46e5; text-decoration: underline; }
+      .tool-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2rem;
+        height: 2rem;
+        padding: 0 0.5rem;
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+        color: #374151;
+        user-select: none;
+      }
+      .tool-btn:hover { background: #f3f4f6; }
+      :global(.dark) .tool-btn { color: #d1d5db; }
+      :global(.dark) .tool-btn:hover { background: #1f2937; }
+    </style>
   </head>
   <body class="min-h-screen bg-gray-50 text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100">
     <!-- 顶部工具栏 -->
     <header class="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-950/90">
       <div class="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
-        <a href={withBase('/')} class="text-lg font-bold tracking-tight">
-          yeccat<span class="text-indigo-600 dark:text-indigo-400">.blog</span>
-          <span class="ml-2 hidden text-sm font-normal text-gray-400 sm:inline">写文章</span>
-        </a>
+        <div class="flex items-center gap-3">
+          <a href={withBase('/')} class="text-lg font-bold tracking-tight">
+            yeccat<span class="text-indigo-600 dark:text-indigo-400">.blog</span>
+          </a>
+          <span class="hidden text-sm text-gray-400 sm:inline" id="page-mode">写文章</span>
+        </div>
         <div class="flex items-center gap-2">
+          <a href={withBase('/manage/')} class="hidden rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 sm:inline-block dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+            管理文章
+          </a>
           <button id="btn-import-md" type="button" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
             导入 MD
-          </button>
-          <button id="btn-preview" type="button" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
-            预览
           </button>
           <button id="btn-key" type="button" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
             <span id="key-label">导入密钥</span>
@@ -43,7 +98,7 @@ import { withBase } from '../../utils/url';
 
     <main class="mx-auto max-w-6xl px-4 py-6">
       <div class="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
-        <!-- 左侧：标题 / slug / 正文 -->
+        <!-- 左侧：标题 / 工具栏 / 正文 -->
         <section class="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900 sm:p-6">
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_220px]">
             <input
@@ -60,25 +115,43 @@ import { withBase } from '../../utils/url';
             />
           </div>
 
-          <!-- 简易工具栏 -->
-          <div class="mt-3 flex flex-wrap items-center gap-1 text-sm">
-            <button type="button" data-fmt="bold" class="rounded px-2 py-1 font-bold hover:bg-gray-100 dark:hover:bg-gray-800" title="粗体">B</button>
-            <button type="button" data-fmt="italic" class="rounded px-2 py-1 italic hover:bg-gray-100 dark:hover:bg-gray-800" title="斜体">I</button>
-            <button type="button" data-fmt="heading" class="rounded px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-800" title="标题">H</button>
-            <button type="button" data-fmt="link" class="rounded px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-800" title="链接">链接</button>
-            <button type="button" id="btn-insert-image" class="rounded px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-800" title="上传并插入图片">图片</button>
-            <button type="button" data-fmt="code" class="rounded px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-800" title="代码块">代码</button>
-            <button type="button" data-fmt="quote" class="rounded px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-800" title="引用">引用</button>
+          <!-- 格式工具栏（mousedown 阻止失焦，保持选区） -->
+          <div class="mt-3 flex flex-wrap items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 dark:border-gray-800 dark:bg-gray-950" id="toolbar">
+            <button type="button" class="tool-btn" data-cmd="undo" title="撤销 (Ctrl+Z)">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>
+            </button>
+            <button type="button" class="tool-btn" data-cmd="redo" title="重做 (Ctrl+Y)">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l6-6m0 0l-6-6m6 6H9a6 6 0 100 12h3" /></svg>
+            </button>
+            <span class="mx-1 h-5 w-px bg-gray-300 dark:bg-gray-700"></span>
+            <button type="button" class="tool-btn" data-block="P" title="正文">正文</button>
+            <button type="button" class="tool-btn font-bold" data-block="H2" title="大标题">大标题</button>
+            <button type="button" class="tool-btn text-sm font-semibold" data-block="H3" title="小标题">小标题</button>
+            <span class="mx-1 h-5 w-px bg-gray-300 dark:bg-gray-700"></span>
+            <button type="button" class="tool-btn font-bold" data-cmd="bold" title="粗体 (Ctrl+B)">B</button>
+            <button type="button" class="tool-btn italic" data-cmd="italic" title="斜体 (Ctrl+I)">I</button>
+            <button type="button" class="tool-btn underline" data-cmd="underline" title="下划线 (Ctrl+U)">U</button>
+            <button type="button" class="tool-btn" data-cmd="strikeThrough" title="删除线">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.995 9.5H6m0 0h12M6 9.5a5.5 5.5 0 019.914-3.312M6 9.5a5.5 5.5 0 009.914 3.312M4 13h16m-8 8v-3" /></svg>
+            </button>
+            <span class="mx-1 h-5 w-px bg-gray-300 dark:bg-gray-700"></span>
+            <button type="button" class="tool-btn" data-cmd="insertUnorderedList" title="无序列表">• 列表</button>
+            <button type="button" class="tool-btn" data-cmd="insertOrderedList" title="有序列表">1. 列表</button>
+            <button type="button" class="tool-btn" data-block="BLOCKQUOTE" title="引用">引用</button>
+            <button type="button" class="tool-btn" data-block="PRE" title="代码块">代码</button>
+            <span class="mx-1 h-5 w-px bg-gray-300 dark:bg-gray-700"></span>
+            <button type="button" class="tool-btn" data-cmd="createLink" title="插入链接">链接</button>
+            <button type="button" class="tool-btn" id="btn-image" title="上传并插入图片（也可以直接 Ctrl+V 粘贴图片）">图片</button>
+            <button type="button" class="tool-btn" data-cmd="removeFormat" title="清除格式">清除</button>
           </div>
 
-          <textarea
-            id="f-content"
-            placeholder="Markdown 内容"
-            class="mt-3 h-[55vh] min-h-[320px] w-full resize-y rounded-lg border border-gray-300 px-4 py-3 font-mono text-sm leading-relaxed outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-950"
-          ></textarea>
-
-          <!-- 预览区 -->
-          <div id="preview" class="prose-custom mt-3 hidden min-h-[320px] rounded-lg border border-gray-300 px-4 py-3 dark:border-gray-700"></div>
+          <!-- 所见即所得编辑区 -->
+          <div
+            id="editor"
+            class="wysiwyg mt-3 min-h-[50vh] rounded-lg border border-gray-300 px-4 py-3 text-[15px] leading-relaxed outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-950"
+            contenteditable="true"
+            data-placeholder="在这里直接写：粘贴图片会自动上传，加粗、标题点工具栏立刻生效，Ctrl+Z 撤销，Ctrl+Y 重做…"
+          ></div>
         </section>
 
         <!-- 右侧：封面 / 元信息 -->
@@ -87,7 +160,10 @@ import { withBase } from '../../utils/url';
             <p class="mb-2 text-sm font-semibold">封面</p>
             <div id="cover-preview" class="hidden">
               <img id="cover-img" alt="封面预览" class="aspect-[16/9] w-full rounded-lg border border-gray-200 object-cover dark:border-gray-800" />
-              <button id="btn-cover-remove" type="button" class="mt-2 text-xs text-red-500 hover:underline">移除封面</button>
+              <div class="mt-2 flex justify-between">
+                <button id="btn-cover-replace" type="button" class="text-xs text-indigo-600 hover:underline dark:text-indigo-400">更换封面</button>
+                <button id="btn-cover-remove" type="button" class="text-xs text-red-500 hover:underline">移除封面</button>
+              </div>
             </div>
             <button id="btn-cover" type="button" class="flex aspect-[16/9] w-full items-center justify-center rounded-lg border border-dashed border-gray-300 text-3xl text-gray-400 hover:border-indigo-500 hover:text-indigo-500 dark:border-gray-700">
               +
@@ -122,7 +198,7 @@ import { withBase } from '../../utils/url';
         </aside>
       </div>
 
-      <!-- 发布状态 -->
+      <!-- 状态提示 -->
       <div id="status" class="mt-6 hidden rounded-xl border border-gray-200 bg-white p-4 text-sm dark:border-gray-800 dark:bg-gray-900"></div>
     </main>
 
@@ -156,19 +232,21 @@ import { withBase } from '../../utils/url';
 
     <script>
       import { marked } from 'marked';
+      import TurndownService from 'turndown';
 
       const OWNER = 'yeccat';
       const REPO = 'yeccat_blog';
       const BRANCH = 'main';
       const API = `https://api.github.com/repos/${OWNER}/${REPO}`;
+      const RAW = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}`;
       const TOKEN_KEY = 'yeccat_blog_gh_token';
-      const BASE = import.meta.env.BASE_URL; // 末尾带 /，本地为 "/"
-      const baseUrl = (p: string) => `${BASE}${p.replace(/^\/+/, '')}`;
+      const BASE = import.meta.env.BASE_URL; // 末尾带 /
+      const siteUrl = (p: string) => `${BASE}${p.replace(/^\/+/, '')}`;
 
       const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+      const editor = $('editor');
       const titleEl = $<HTMLInputElement>('f-title');
       const slugEl = $<HTMLInputElement>('f-slug');
-      const contentEl = $<HTMLTextAreaElement>('f-content');
       const descEl = $<HTMLTextAreaElement>('f-desc');
       const tagInput = $<HTMLInputElement>('f-tag-input');
       const tagList = $('tag-list');
@@ -181,11 +259,22 @@ import { withBase } from '../../utils/url';
       const keyLabel = $('key-label');
       const btnPublish = $<HTMLButtonElement>('btn-publish');
 
-      let tags: string[] = [];
-      let coverFile: File | null = null;
-      let publishMode = false; // 发布流程中需要密钥时打开弹窗
+      // 编辑模式：/write/?slug=xxx
+      const editSlug = new URLSearchParams(location.search).get('slug');
+      if (editSlug) $('page-mode').textContent = `编辑文章：${editSlug}`;
 
-      // ---------- 工具 ----------
+      let tags: string[] = [];
+      // 封面状态：'' 无封面；/covers|/images 开头为仓库相对路径（新上传或沿用旧封面）
+      let coverPath = '';
+      let publishMode = false;
+      let busy = false;
+
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const setStatus = (html: string, tone: 'info' | 'ok' | 'err' = 'info') => {
+        statusEl.classList.remove('hidden', 'border-red-300', 'border-green-300', 'border-gray-200');
+        statusEl.classList.add(tone === 'err' ? 'border-red-300' : tone === 'ok' ? 'border-green-300' : 'border-gray-200');
+        statusEl.innerHTML = html;
+      };
       const nowLocalInput = () => {
         const d = new Date();
         const pad = (n: number) => String(n).padStart(2, '0');
@@ -197,18 +286,11 @@ import { withBase } from '../../utils/url';
         return `post-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
       };
       dateEl.value = nowLocalInput();
-
-      const setStatus = (html: string, tone: 'info' | 'ok' | 'err' = 'info') => {
-        statusEl.classList.remove('hidden', 'border-red-300', 'border-green-300');
-        statusEl.classList.add(tone === 'err' ? 'border-red-300' : tone === 'ok' ? 'border-green-300' : 'border-gray-200');
-        statusEl.innerHTML = html;
-      };
-      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
       function yamlStr(s: string) {
         return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
       }
 
+      // ---------- 标签 ----------
       function renderTags() {
         tagList.innerHTML = '';
         tags.forEach((t, i) => {
@@ -219,91 +301,46 @@ import { withBase } from '../../utils/url';
           x.type = 'button';
           x.textContent = '×';
           x.className = 'text-indigo-400 hover:text-indigo-700';
-          x.onclick = () => {
-            tags.splice(i, 1);
-            renderTags();
-          };
+          x.onclick = () => { tags.splice(i, 1); renderTags(); };
           chip.appendChild(x);
           tagList.appendChild(chip);
         });
       }
-
       const flushTagInput = () => {
         const v = tagInput.value.trim().replace(/^,|,$/g, '');
         if (v && !tags.includes(v)) tags.push(v);
         tagInput.value = '';
         renderTags();
       };
-
       tagInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ',') {
-          e.preventDefault();
-          flushTagInput();
-        }
+        if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); flushTagInput(); }
       });
-      // 失焦或点击发布时，自动把已输入但未回车的文字收集为标签
       tagInput.addEventListener('blur', flushTagInput);
 
-      // ---------- 预览 ----------
-      let previewing = false;
-      const previewEl = $('preview');
-      const renderPreview = () => {
-        previewEl.innerHTML = marked.parse(contentEl.value || '*（暂无内容）*') as string;
+      // ---------- 所见即所得工具栏 ----------
+      const exec = (command: string, value?: string) => {
+        editor.focus();
+        document.execCommand(command, false, value);
       };
-      $('btn-preview').addEventListener('click', () => {
-        previewing = !previewing;
-        previewEl.classList.toggle('hidden', !previewing);
-        contentEl.classList.toggle('hidden', previewing);
-        $('btn-preview').textContent = previewing ? '编辑' : '预览';
-        if (previewing) renderPreview();
-      });
-
-      // ---------- 简易格式工具 ----------
-      const insertAtSelection = (before: string, text: string, after: string) => {
-        const ta = contentEl;
-        const start = ta.selectionStart;
-        ta.value = ta.value.slice(0, start) + before + text + after + ta.value.slice(ta.selectionEnd);
-        ta.focus();
-        ta.setSelectionRange(start + before.length, start + before.length + text.length);
-        if (previewing) renderPreview();
-      };
-
-      document.querySelectorAll<HTMLButtonElement>('[data-fmt]').forEach((btn) => {
+      document.querySelectorAll<HTMLButtonElement>('#toolbar [data-cmd]').forEach((btn) => {
+        // mousedown 阻止默认，避免点击按钮时编辑区丢失光标
+        btn.addEventListener('mousedown', (e) => e.preventDefault());
         btn.addEventListener('click', () => {
-          const kind = btn.dataset.fmt;
-          const ta = contentEl;
-          const start = ta.selectionStart;
-          const end = ta.selectionEnd;
-          const sel = ta.value.slice(start, end);
-
-          if (kind === 'link') {
-            let url: string | null;
-            let text: string;
-            if (/^https?:\/\/\S+$/.test(sel.trim())) {
-              // 选中的本身就是网址
-              url = sel.trim();
-              text = sel.trim();
-            } else {
-              url = window.prompt('输入链接地址：', 'https://');
-              if (url === null) return;
-              url = url.trim();
-              if (!url) return;
-              text = sel || '链接文字';
-            }
-            insertAtSelection('[', `${text}](${url})`, '');
+          const cmd = btn.dataset.cmd!;
+          if (cmd === 'createLink') {
+            const sel = window.getSelection()?.toString() ?? '';
+            const url = window.prompt('输入链接地址：', 'https://');
+            if (!url || url === 'https://') return;
+            if (sel) exec('createLink', url);
+            else document.execCommand('insertHTML', false, `<a href="${url}">${url.replace(/^https?:\/\//, '')}</a>`);
             return;
           }
-
-          const wrap: Record<string, [string, string]> = {
-            bold: ['**', '**'],
-            italic: ['*', '*'],
-            code: ['\n```\n', '\n```\n'],
-            quote: ['\n> ', '\n'],
-            heading: ['\n## ', '\n'],
-          };
-          const [a, b] = wrap[kind!];
-          insertAtSelection(a, sel || '文字', b);
+          exec(cmd);
         });
+      });
+      document.querySelectorAll<HTMLButtonElement>('#toolbar [data-block]').forEach((btn) => {
+        btn.addEventListener('mousedown', (e) => e.preventDefault());
+        btn.addEventListener('click', () => exec('formatBlock', btn.dataset.block!));
       });
 
       // ---------- 封面 ----------
@@ -311,93 +348,211 @@ import { withBase } from '../../utils/url';
       const coverImg = $<HTMLImageElement>('cover-img');
       const coverBtn = $('btn-cover');
       const coverFileInput = $<HTMLInputElement>('file-cover');
-      coverBtn.addEventListener('click', () => coverFileInput.click());
-      coverFileInput.addEventListener('change', () => {
-        coverFile = coverFileInput.files?.[0] ?? null;
-        if (coverFile) {
-          coverImg.src = URL.createObjectURL(coverFile);
-          coverPreview.classList.remove('hidden');
-          coverBtn.classList.add('hidden');
-        }
-      });
-      $('btn-cover-remove').addEventListener('click', () => {
-        coverFile = null;
+      const showCover = (src: string) => {
+        coverImg.src = src;
+        coverPreview.classList.remove('hidden');
+        coverBtn.classList.add('hidden');
+      };
+      const hideCover = () => {
+        coverPath = '';
         coverFileInput.value = '';
         coverPreview.classList.add('hidden');
         coverBtn.classList.remove('hidden');
-      });
+      };
+      coverBtn.addEventListener('click', () => coverFileInput.click());
+      $('btn-cover-replace').addEventListener('click', () => coverFileInput.click());
+      $('btn-cover-remove').addEventListener('click', hideCover);
 
-      // ---------- 插入图片（立即上传到仓库） ----------
+      // ---------- 图片上传（工具栏 / 粘贴 / 封面） ----------
       const imageInput = $<HTMLInputElement>('file-image');
-      $('btn-insert-image').addEventListener('click', async () => {
-        const token = localStorage.getItem(TOKEN_KEY);
-        if (!token) {
-          publishMode = true;
-          openModal();
-          return;
-        }
+      $('btn-image').addEventListener('mousedown', (e) => e.preventDefault());
+      $('btn-image').addEventListener('click', async () => {
+        if (!localStorage.getItem(TOKEN_KEY)) { publishMode = true; openModal(); return; }
         imageInput.click();
       });
       imageInput.addEventListener('change', async () => {
         const file = imageInput.files?.[0];
-        if (!file) return;
+        if (file) await insertImageFile(file);
+        imageInput.value = '';
+      });
+
+      async function uploadAsset(file: File, dir: string): Promise<string> {
         const token = localStorage.getItem(TOKEN_KEY)!;
         const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
-        const path = `public/images/${Date.now()}.${ext}`;
+        const repoPath = `/${dir}/${Date.now()}.${ext}`;
+        const b64 = await fileToBase64(file);
+        await githubPut(`public${repoPath}`, `上传图片 ${file.name}`, b64, token);
+        return repoPath; // 如 /images/123.png
+      }
+
+      async function insertImageFile(file: File) {
         setStatus(`正在上传图片 ${file.name}…`);
         try {
-          const dataUrl = await new Promise<string>((res, rej) => {
-            const r = new FileReader();
-            r.onload = () => res((r.result as string).split(',')[1]);
-            r.onerror = rej;
-            r.readAsDataURL(file);
-          });
-          await githubPut(path, `上传图片 ${file.name}`, dataUrl, token, undefined);
-          const repoPath = `/${path.replace(/^public/, '')}`;
-          const md = `\n![${file.name.replace(/\.[^.]+$/, '')}](${baseUrl(repoPath)})\n`;
-          const pos = contentEl.selectionStart ?? contentEl.value.length;
-          contentEl.value = contentEl.value.slice(0, pos) + md + contentEl.value.slice(pos);
-          setStatus('图片已上传并插入正文。', 'ok');
-          if (previewing) renderPreview();
+          const repoPath = await uploadAsset(file, 'images');
+          // raw 地址在提交后立即可见；写入正文时用站点路径（turndown 依据 data-repopath 生成）
+          const html = `<img src="${RAW}/public${repoPath}" data-repopath="${repoPath}" alt="${file.name.replace(/\.[^.]+$/, '')}" />`;
+          editor.focus();
+          document.execCommand('insertHTML', false, html);
+          setStatus('图片已上传并插入。', 'ok');
         } catch (e) {
           setStatus(`图片上传失败：${(e as Error).message}`, 'err');
-        } finally {
-          imageInput.value = '';
+        }
+      }
+
+      // 直接 Ctrl+V 粘贴图片
+      editor.addEventListener('paste', (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            const file = item.getAsFile();
+            if (file) {
+              e.preventDefault();
+              if (!localStorage.getItem(TOKEN_KEY)) {
+                alert('粘贴图片需要先导入密钥');
+                publishMode = true;
+                openModal();
+                return;
+              }
+              insertImageFile(file);
+              return;
+            }
+          }
         }
       });
 
-      // ---------- 导入 MD ----------
+      coverFileInput.addEventListener('change', async () => {
+        const file = coverFileInput.files?.[0];
+        if (!file) return;
+        setStatus('正在上传封面…');
+        try {
+          const repoPath = await uploadAsset(file, 'covers');
+          coverPath = repoPath;
+          showCover(`${RAW}/public${repoPath}`);
+          setStatus('封面已上传。', 'ok');
+        } catch (e) {
+          setStatus(`封面上传失败：${(e as Error).message}`, 'err');
+        }
+        coverFileInput.value = '';
+      });
+
+      // ---------- 导入 Markdown ----------
       const mdInput = $<HTMLInputElement>('file-md');
       $('btn-import-md').addEventListener('click', () => mdInput.click());
       mdInput.addEventListener('change', async () => {
         const file = mdInput.files?.[0];
         if (!file) return;
         const text = await file.text();
-        const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-        if (fm) {
-          const meta = fm[1];
-          const get = (k: string) => meta.match(new RegExp(`^${k}:\\s*(.+)$`, 'm'))?.[1]?.trim().replace(/^["']|["']$/g, '');
-          if (get('title')) titleEl.value = get('title')!;
-          if (get('description')) descEl.value = get('description')!;
-          if (get('slug')) slugEl.value = get('slug')!;
-          if (get('pubDatetime')) {
-            const d = new Date(get('pubDatetime')!);
-            if (!isNaN(d.getTime())) dateEl.value = nowLocalInput.call(null).slice(0, 11) + `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-          }
-          const t = get('tags');
-          if (t) {
-            tags = t.startsWith('[') ? t.replace(/[[\]'"]/g, '').split(',').map((s) => s.trim()).filter(Boolean)
-              : meta.match(/^\s*-\s*(.+)$/gm)?.map((s) => s.replace(/^\s*-\s*/, '').replace(/["']/g, '').trim()).filter(Boolean) ?? tags;
-            renderTags();
-          }
-          draftEl.checked = get('draft') === 'true';
-          contentEl.value = fm[2];
-        } else {
-          contentEl.value = text;
-        }
-        if (previewing) renderPreview();
+        loadMarkdown(text);
         mdInput.value = '';
       });
+
+      function parseFrontmatter(text: string) {
+        const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+        if (!fm) return { meta: {} as Record<string, string>, body: text };
+        const meta: Record<string, string> = {};
+        for (const line of fm[1].split(/\r?\n/)) {
+          const m = line.match(/^([a-zA-Z]+):\s*(.*)$/);
+          if (m) meta[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+        }
+        return { meta, body: fm[2] };
+      }
+
+      function loadMarkdown(text: string) {
+        const { meta, body } = parseFrontmatter(text);
+        if (meta.title) titleEl.value = meta.title;
+        if (meta.description) descEl.value = meta.description;
+        if (meta.pubDatetime) {
+          const d = new Date(meta.pubDatetime);
+          if (!isNaN(d.getTime())) dateEl.value = toLocalInput(d);
+        }
+        if (meta.cover) {
+          coverPath = meta.cover;
+          showCover(siteUrl(meta.cover));
+        }
+        draftEl.checked = meta.draft === 'true';
+        tags = [];
+        const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+        if (fm) {
+          const inList = fm[1].match(/tags:\r?\n((?:\s*-\s*.+\r?\n?)*)/);
+          if (inList) tags = inList[1].split(/\r?\n/).map((s) => s.replace(/^\s*-\s*/, '').replace(/["']/g, '').trim()).filter(Boolean);
+          else if (meta.tags && meta.tags.startsWith('[')) tags = meta.tags.replace(/[[\]'"]/g, '').split(',').map((s) => s.trim()).filter(Boolean);
+        }
+        renderTags();
+        editor.innerHTML = marked.parse(body) as string;
+      }
+      const toLocalInput = (d: Date) => {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      };
+
+      // ---------- HTML → Markdown ----------
+      const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
+      turndown.addRule('repoImage', {
+        filter: (node: Node) =>
+          node.nodeName === 'IMG' && !!(node as HTMLElement).getAttribute?.('data-repopath'),
+        replacement: (_content: string, node: Node) => {
+          const p = (node as HTMLElement).getAttribute('data-repopath')!;
+          const alt = (node as HTMLElement).getAttribute('alt') || '';
+          return `![${alt}](${siteUrl(p)})`;
+        },
+      });
+
+      // ---------- GitHub API ----------
+      async function fetchRetry(input: string, init: RequestInit, retries = 2) {
+        let lastErr: unknown;
+        for (let i = 0; i <= retries; i++) {
+          try { return await fetch(input, init); }
+          catch (e) { lastErr = e; if (i < retries) await sleep(900 * (i + 1)); }
+        }
+        throw lastErr;
+      }
+      async function githubRequest(path: string, opts: RequestInit = {}) {
+        const token = localStorage.getItem(TOKEN_KEY)!;
+        const r = await fetchRetry(`${API}${path}`, {
+          ...opts,
+          headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', ...(opts.headers ?? {}) },
+        });
+        if (!r.ok) {
+          let msg = `HTTP ${r.status}`;
+          try { msg = (await r.json()).message ?? msg; } catch {}
+          const err = new Error(msg);
+          (err as Error & { status?: number }).status = r.status;
+          throw err;
+        }
+        return r.status === 204 ? null : r.json();
+      }
+      async function githubPut(path: string, message: string, contentBase64: string, token: string, sha?: string) {
+        const body: Record<string, unknown> = { message, content: contentBase64, branch: BRANCH };
+        if (sha) body.sha = sha;
+        try {
+          const r = await fetchRetry(`${API}/contents/${path}`, {
+            method: 'PUT',
+            headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (!r.ok) {
+            let msg = `HTTP ${r.status}`;
+            try { msg = (await r.json()).message ?? msg; } catch {}
+            throw new Error(msg);
+          }
+          return r.json();
+        } catch {
+          // 响应丢失时，通过该文件最近一次提交确认是否其实已成功
+          try {
+            const commits = await githubRequest(`/commits?path=${encodeURIComponent(path)}&per_page=1`);
+            if (Array.isArray(commits) && commits[0]) return { commit: { sha: commits[0].sha }, possiblyCommitted: true };
+          } catch {}
+          throw new Error('网络中断，且无法确认提交是否成功，请稍后到“管理文章”核对');
+        }
+      }
+      const fileToBase64 = (file: File) =>
+        new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve((r.result as string).split(',')[1]);
+          r.onerror = reject;
+          r.readAsDataURL(file);
+        });
 
       // ---------- 密钥弹窗 ----------
       function openModal() {
@@ -407,39 +562,22 @@ import { withBase } from '../../utils/url';
         keyError.classList.add('hidden');
         keyInput.focus();
       }
-      function closeModal() {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-      }
-      $('btn-key').addEventListener('click', () => {
-        publishMode = false;
-        openModal();
-      });
+      function closeModal() { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+      $('btn-key').addEventListener('click', () => { publishMode = false; openModal(); });
       $('key-cancel').addEventListener('click', closeModal);
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) closeModal();
-      });
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
       $('key-save').addEventListener('click', async () => {
         const token = keyInput.value.trim();
         keyError.classList.add('hidden');
-        if (!token) {
-          keyError.textContent = '请粘贴令牌';
-          keyError.classList.remove('hidden');
-          return;
-        }
+        if (!token) { keyError.textContent = '请粘贴令牌'; keyError.classList.remove('hidden'); return; }
         try {
-          const r = await fetch('https://api.github.com/user', {
-            headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
-          });
+          const r = await fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
           if (!r.ok) throw new Error(`令牌无效（${r.status}）`);
           const u = await r.json();
           localStorage.setItem(TOKEN_KEY, token);
           keyLabel.textContent = `密钥：${u.login}`;
           closeModal();
-          if (publishMode) {
-            publishMode = false;
-            publish();
-          }
+          if (publishMode) { publishMode = false; publish(); }
         } catch (e) {
           keyError.textContent = `验证失败：${(e as Error).message}`;
           keyError.classList.remove('hidden');
@@ -447,188 +585,101 @@ import { withBase } from '../../utils/url';
       });
       {
         const t = localStorage.getItem(TOKEN_KEY);
-        if (t) {
-          fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${t}` } })
-            .then((r) => (r.ok ? r.json() : null))
-            .then((u) => {
-              if (u?.login) keyLabel.textContent = `密钥：${u.login}`;
-            })
-            .catch(() => {});
-        }
+        if (t) fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${t}` } })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((u) => { if (u?.login) keyLabel.textContent = `密钥：${u.login}`; })
+          .catch(() => {});
       }
 
-      // ---------- GitHub API ----------
-      // 仅对“网络层错误”（Failed to fetch / 连接中断）重试；HTTP 4xx/5xx 不重试
-      async function fetchRetry(input: string, init: RequestInit, retries = 2) {
-        let lastErr: unknown;
-        for (let i = 0; i <= retries; i++) {
-          try {
-            return await fetch(input, init);
-          } catch (e) {
-            lastErr = e;
-            if (i < retries) await sleep(900 * (i + 1));
-          }
-        }
-        throw lastErr;
-      }
-
-      async function githubRequest(path: string, opts: RequestInit = {}) {
-        const token = localStorage.getItem(TOKEN_KEY)!;
-        const r = await fetchRetry(`${API}${path}`, {
-          ...opts,
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            ...(opts.headers ?? {}),
-          },
-        });
-        if (!r.ok) {
-          let msg = `HTTP ${r.status}`;
-          try {
-            msg = (await r.json()).message ?? msg;
-          } catch {}
-          throw new Error(msg);
-        }
-        return r.status === 204 ? null : r.json();
-      }
-
-      async function githubPut(
-        path: string,
-        message: string,
-        contentBase64: string,
-        token: string,
-        sha?: string,
-      ) {
-        const body: Record<string, unknown> = { message, content: contentBase64, branch: BRANCH };
-        if (sha) body.sha = sha;
-        let r: Response;
+      // ---------- 加载已有文章（编辑模式） ----------
+      async function loadExisting(slug: string) {
+        setStatus('正在加载文章…');
+        btnPublish.disabled = true;
         try {
-          r = await fetchRetry(`${API}/contents/${path}`, {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(body),
-          });
-        } catch {
-          // 请求发出但响应丢失时，文件可能其实已经提交成功。
-          // 查询该文件最近一次提交：拿到真实 commit sha 后视为成功，避免重复提交产生副本。
-          try {
-            const commits = await githubRequest(`/commits?path=${encodeURIComponent(path)}&per_page=1`);
-            if (Array.isArray(commits) && commits[0]) {
-              return { commit: { sha: commits[0].sha }, possiblyCommitted: true };
-            }
-          } catch {}
-          throw new Error('网络中断，且无法确认提交是否成功，请稍后刷新文章列表核对');
+          const token = localStorage.getItem(TOKEN_KEY);
+          const headers = token ? { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } : { Accept: 'application/vnd.github+json' };
+          const r = await fetch(`${API}/contents/src/data/blog/${slug}/index.md?ref=${BRANCH}`, { headers });
+          if (!r.ok) throw new Error(`文章不存在（${r.status}）`);
+          const f = await r.json();
+          const text = new TextDecoder().decode(Uint8Array.from(atob(f.content.replace(/\n/g, '')), (c) => c.charCodeAt(0)));
+          slugEl.value = slug;
+          slugEl.readOnly = true;
+          slugEl.classList.add('bg-gray-100', 'dark:bg-gray-800');
+          loadMarkdown(text);
+          setStatus('已加载文章，修改后点“发布”即可更新。', 'ok');
+        } catch (e) {
+          setStatus(`加载失败：${(e as Error).message}`, 'err');
+        } finally {
+          btnPublish.disabled = false;
         }
-        if (!r.ok) {
-          let msg = `HTTP ${r.status}`;
-          try {
-            msg = (await r.json()).message ?? msg;
-          } catch {}
-          throw new Error(msg);
-        }
-        return r.json();
       }
-
-      const fileToBase64 = (file: File) =>
-        new Promise<string>((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => resolve((r.result as string).split(',')[1]);
-          r.onerror = reject;
-          r.readAsDataURL(file);
-        });
+      if (editSlug) {
+        if (!localStorage.getItem(TOKEN_KEY)) { publishMode = false; openModal(); }
+        loadExisting(editSlug);
+      }
 
       // ---------- 发布 ----------
-      btnPublish.addEventListener('click', publish);
-
-      // 会话内固定自动生成的 slug，避免网络重试/多次点击产生多篇重复文章
+      btnPublish.addEventListener('click', () => { if (!busy) publish(); });
       let sessionSlug = '';
 
       async function publish() {
         flushTagInput();
         const title = titleEl.value.trim();
-        const content = contentEl.value.trim();
+        const text = editor.innerText.trim();
         if (!title) return alert('请填写标题');
-        if (!content) return alert('请填写正文内容');
-
-        let token = localStorage.getItem(TOKEN_KEY);
-        if (!token) {
-          publishMode = true;
-          openModal();
-          return;
-        }
+        if (!text && !editor.querySelector('img')) return alert('请填写正文内容');
+        if (!localStorage.getItem(TOKEN_KEY)) { publishMode = true; openModal(); return; }
 
         const slug = (slugEl.value.trim() || sessionSlug || autoSlug()).replace(/^\/+|\/+$/g, '');
         sessionSlug = slug;
         if (!/^[a-zA-Z0-9_-]+$/.test(slug)) return alert('slug 只能包含字母、数字、连字符和下划线');
         const filePath = `src/data/blog/${slug}/index.md`;
+        const token = localStorage.getItem(TOKEN_KEY)!;
 
+        busy = true;
         btnPublish.disabled = true;
         try {
-          // 1) 检查是否已存在（覆盖需确认）
           setStatus('正在检查文章…');
           let existingSha: string | undefined;
           try {
             const ex = await githubRequest(`/contents/${filePath}?ref=${BRANCH}`);
             existingSha = ex.sha;
-            if (!confirm(`文章 "${slug}" 已存在，是否覆盖更新？`)) {
-              setStatus('已取消。');
-              return;
-            }
           } catch (e) {
-            // 仅 404 视为“新文章”；网络错误等应中止
-            if ((e as Error).message !== 'Not Found' && !(e as Error).message.includes('404')) throw e;
+            if ((e as Error & { status?: number }).status !== 404) throw e;
           }
 
-          // 2) 上传封面
-          let coverPath = '';
-          if (coverFile) {
-            setStatus('正在上传封面…');
-            const ext = coverFile.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-            coverPath = `/covers/${slug}-${Date.now()}.${ext}`;
-            await githubPut(
-              `public${coverPath}`,
-              `上传封面 ${slug}`,
-              await fileToBase64(coverFile),
-              token!,
-            );
-          }
-
-          // 3) 组装 Markdown
-          const dt = dateEl.value ? new Date(dateEl.value) : new Date();
-          const pub = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+          // 组装 Markdown（封面未改动时沿用原路径）
+          const finalCover = coverPath;
+          const body = turndown.turndown(editor.innerHTML).trim();
+          const d = dateEl.value ? new Date(dateEl.value) : new Date();
+          const pub = toLocalInput(d);
           const fm = [
             '---',
             `title: ${yamlStr(title)}`,
             `description: ${yamlStr(descEl.value.trim() || title)}`,
             `pubDatetime: ${pub}`,
-            // 无标签时必须输出空数组，`tags:` 裸键会被 YAML 解析为 null 导致构建失败
             tags.length ? 'tags:' : 'tags: []',
             ...tags.map((t) => `  - ${yamlStr(t)}`),
             `draft: ${draftEl.checked}`,
-            ...(coverPath ? [`cover: ${coverPath}`] : []),
+            ...(finalCover ? [`cover: ${finalCover}`] : []),
             '---',
             '',
           ].join('\n');
-          const markdown = fm + content + '\n';
+          const markdown = `${fm}${body}\n`;
 
-          // 4) 提交文章
-          setStatus('正在提交到仓库…');
+          setStatus(existingSha ? '正在提交更新…' : '正在提交到仓库…');
           const committed = await githubPut(
             filePath,
             existingSha ? `更新文章：${title}` : `发布文章：${title}`,
             btoa(unescape(encodeURIComponent(markdown))),
-            token!,
+            token,
             existingSha,
           );
           const sha: string = committed.commit.sha;
-          setStatus(`已提交（${sha.slice(0, 7)}），等待 GitHub Actions 构建部署，通常需要 1 分钟左右…`);
+          setStatus(`已提交（${sha.slice(0, 7)}），等待自动构建部署，约 1 分钟…`);
 
-          // 5) 轮询部署状态（查询过程中网络抖动不影响“文章已提交”的事实）
-          const articleUrl = baseUrl(`/blog/${slug}/`);
+          // 轮询部署（单次查询失败不影响已提交的事实）
+          const articleUrl = siteUrl(`/blog/${slug}/`);
           let runId: number | null = null;
           for (let i = 0; i < 14; i++) {
             await sleep(5000);
@@ -637,21 +688,11 @@ import { withBase } from '../../utils/url';
               const run = runs.workflow_runs.find(
                 (r: { head_sha: string; path: string }) => r.head_sha === sha && r.path.includes('deploy.yml'),
               );
-              if (run) {
-                runId = run.id;
-                break;
-              }
-            } catch {
-              // 单次查询失败，继续下一轮
-            }
+              if (run) { runId = run.id; break; }
+            } catch {}
           }
           if (!runId) {
-            setStatus(
-              draftEl.checked
-                ? '文章已提交，部署任务稍后会自动运行。'
-                : `文章已提交，正在后台部署（约 1 分钟）。<a class="text-indigo-600 underline" href="${articleUrl}">稍后点此查看</a>`,
-              'ok',
-            );
+            finishSuccess(draftEl.checked, articleUrl, '文章已提交，正在后台部署。');
             return;
           }
           for (let i = 0; i < 40; i++) {
@@ -660,36 +701,39 @@ import { withBase } from '../../utils/url';
               const run = await githubRequest(`/actions/runs/${runId}`);
               if (run.status === 'completed') {
                 if (run.conclusion === 'success') {
-                  setStatus(
-                    draftEl.checked
-                      ? '部署完成。文章已设为隐藏，线上暂不展示。'
-                      : `🎉 发布成功！<a class="text-indigo-600 underline" href="${articleUrl}">点此查看文章</a>`,
-                    'ok',
-                  );
+                  finishSuccess(draftEl.checked, articleUrl, '🎉 发布成功！');
                 } else {
-                  setStatus(
-                    `文章已保存，但本次构建失败（${run.conclusion}）。<a class="text-indigo-600 underline" href="https://github.com/${OWNER}/${REPO}/actions/runs/${runId}" target="_blank" rel="noopener">查看构建日志</a>`,
-                    'err',
-                  );
+                  setStatus(`文章已保存，但本次构建失败（${run.conclusion}）。<a class="text-indigo-600 underline" href="https://github.com/${OWNER}/${REPO}/actions/runs/${runId}" target="_blank" rel="noopener">查看构建日志</a>`, 'err');
                 }
                 return;
               }
               setStatus(`正在构建部署中…（${(i + 1) * 5}s）`);
             } catch {
-              setStatus(`正在构建部署中…（查询波动，继续等待 ${(i + 1) * 5}s）`);
+              setStatus(`正在构建部署中…（网络波动，继续等待 ${(i + 1) * 5}s）`);
             }
           }
-          setStatus(
-            draftEl.checked
-              ? '文章已提交，部署仍在进行，可稍后到 Actions 页面确认。'
-              : `文章已提交，部署仍在进行。<a class="text-indigo-600 underline" href="${articleUrl}">稍后点此查看</a>`,
-            'ok',
-          );
+          finishSuccess(draftEl.checked, articleUrl, '文章已提交，部署仍在进行。');
         } catch (e) {
+          // 兜底：任何失败都核实文件是否其实已经提交成功
+          try {
+            await githubRequest(`/contents/${filePath}?ref=${BRANCH}`);
+            finishSuccess(draftEl.checked, siteUrl(`/blog/${slug}/`), '文章已提交成功（进度查询中断，不影响发布）。');
+            return;
+          } catch {}
           setStatus(`发布失败：${(e as Error).message}`, 'err');
         } finally {
+          busy = false;
           btnPublish.disabled = false;
         }
+      }
+
+      function finishSuccess(isDraft: boolean, url: string, prefix: string) {
+        if (isDraft) {
+          setStatus(`${prefix}文章已设为隐藏，线上暂不展示。可到<a class="text-indigo-600 underline" href="${siteUrl('/manage/')}">管理文章</a>查看。`, 'ok');
+          return;
+        }
+        setStatus(`${prefix} 正在跳转到文章… <a class="text-indigo-600 underline" href="${url}">立即查看</a>`, 'ok');
+        setTimeout(() => { window.location.href = url; }, 1600);
       }
     </script>
   </body>
