@@ -20,10 +20,20 @@ import { withBase } from '../../utils/url';
         pointer-events: none;
       }
       .wysiwyg img {
+        display: block;
         max-width: 100%;
+        height: auto;
         border-radius: 0.5rem;
         margin: 0.75rem 0;
-        cursor: default;
+      }
+      .wysiwyg img.img-uploading {
+        opacity: 0.6;
+        outline: 2px dashed #818cf8;
+        outline-offset: 2px;
+      }
+      .wysiwyg img.img-failed {
+        outline: 2px solid #ef4444;
+        outline-offset: 2px;
       }
       .wysiwyg h1 { font-size: 1.875rem; font-weight: 700; margin: 1rem 0 0.5rem; }
       .wysiwyg h2 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; }
@@ -82,6 +92,9 @@ import { withBase } from '../../utils/url';
           </a>
           <button id="btn-import-md" type="button" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
             导入 MD
+          </button>
+          <button id="btn-preview" type="button" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+            预览
           </button>
           <button id="btn-key" type="button" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
             <span id="key-label">导入密钥</span>
@@ -203,6 +216,22 @@ import { withBase } from '../../utils/url';
       <div id="status" class="mt-6 hidden rounded-xl border border-gray-200 bg-white p-4 text-sm dark:border-gray-800 dark:bg-gray-900"></div>
     </main>
 
+    <!-- 预览弹窗：按线上文章样式渲染 -->
+    <div id="preview-modal" class="fixed inset-0 z-50 hidden items-start justify-center overflow-y-auto bg-black/50 px-4 py-8">
+      <div class="w-full max-w-3xl rounded-2xl bg-white shadow-xl dark:bg-gray-900">
+        <div class="sticky top-0 flex items-center justify-between rounded-t-2xl border-b border-gray-200 bg-white/95 px-6 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
+          <span class="text-sm font-semibold text-gray-500">预览（发布后的效果）</span>
+          <button id="pv-close" type="button" class="rounded-lg border border-gray-300 px-3 py-1 text-sm dark:border-gray-700">关闭</button>
+        </div>
+        <div class="px-6 py-6">
+          <h1 id="pv-title" class="text-3xl font-bold leading-tight tracking-tight"></h1>
+          <p id="pv-meta" class="mt-3 text-sm text-gray-500"></p>
+          <img id="pv-cover" alt="" class="mt-6 hidden max-h-[420px] w-full rounded-xl border border-gray-200 object-contain dark:border-gray-800" />
+          <div id="pv-body" class="wysiwyg mt-6 border-none p-0"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 密钥弹窗 -->
     <div id="key-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 px-4">
       <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
@@ -239,7 +268,6 @@ import { withBase } from '../../utils/url';
       const REPO = 'yeccat_blog';
       const BRANCH = 'main';
       const API = `https://api.github.com/repos/${OWNER}/${REPO}`;
-      const RAW = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}`;
       const TOKEN_KEY = 'yeccat_blog_gh_token';
       const BASE = import.meta.env.BASE_URL; // 末尾带 /
       const siteUrl = (p: string) => `${BASE}${p.replace(/^\/+/, '')}`;
@@ -325,17 +353,45 @@ import { withBase } from '../../utils/url';
         editor.focus();
         document.execCommand(command, false, value);
       };
+
+      // 实时记住编辑区内的选区，点工具栏按钮导致失焦后可以恢复
+      let savedRange: Range | null = null;
+      const selectionInside = () => {
+        const sel = window.getSelection();
+        return !!sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode);
+      };
+      document.addEventListener('selectionchange', () => {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+          savedRange = sel.getRangeAt(0).cloneRange();
+        }
+      });
+      const restoreRange = () => {
+        editor.focus();
+        if (savedRange) {
+          const sel = window.getSelection()!;
+          sel.removeAllRanges();
+          sel.addRange(savedRange);
+        }
+      };
+
       document.querySelectorAll<HTMLButtonElement>('#toolbar [data-cmd]').forEach((btn) => {
         // mousedown 阻止默认，避免点击按钮时编辑区丢失光标
         btn.addEventListener('mousedown', (e) => e.preventDefault());
         btn.addEventListener('click', () => {
           const cmd = btn.dataset.cmd!;
           if (cmd === 'createLink') {
-            const sel = window.getSelection()?.toString() ?? '';
+            // 恢复到点按钮前的选区，链接直接挂在选中的文字上
+            const hadSelection = selectionInside() || (savedRange && savedRange.toString().length > 0);
             const url = window.prompt('输入链接地址：', 'https://');
             if (!url || url === 'https://') return;
-            if (sel) exec('createLink', url);
-            else document.execCommand('insertHTML', false, `<a href="${url}">${url.replace(/^https?:\/\//, '')}</a>`);
+            if (hadSelection) {
+              restoreRange();
+              document.execCommand('createLink', false, url);
+            } else {
+              editor.focus();
+              document.execCommand('insertHTML', false, `<a href="${url}">${url.replace(/^https?:\/\//, '')}</a>`);
+            }
             return;
           }
           exec(cmd);
@@ -366,7 +422,7 @@ import { withBase } from '../../utils/url';
       $('btn-cover-replace').addEventListener('click', () => coverFileInput.click());
       $('btn-cover-remove').addEventListener('click', hideCover);
 
-      // ---------- 图片上传（工具栏 / 粘贴 / 封面） ----------
+      // ---------- 图片：本地压缩 → 立刻显示 → 后台上传 ----------
       const imageInput = $<HTMLInputElement>('file-image');
       $('btn-image').addEventListener('mousedown', (e) => e.preventDefault());
       $('btn-image').addEventListener('click', async () => {
@@ -379,64 +435,165 @@ import { withBase } from '../../utils/url';
         imageInput.value = '';
       });
 
-      async function uploadAsset(file: File, dir: string): Promise<string> {
-        const token = localStorage.getItem(TOKEN_KEY)!;
-        const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
-        const repoPath = `/${dir}/${Date.now()}.${ext}`;
-        const b64 = await fileToBase64(file);
-        await githubPut(`public${repoPath}`, `上传图片 ${file.name}`, b64, token);
-        return repoPath; // 如 /images/123.png
-      }
+      // 进行中的上传；发布前等待全部完成
+      const pendingUploads = new Set<number>();
+      const waitForUploads = () =>
+        new Promise<void>((resolve) => {
+          if (pendingUploads.size === 0) return resolve();
+          setStatus(`还有 ${pendingUploads.size} 张图片在后台上传，传完自动继续…`);
+          const t = window.setInterval(() => {
+            if (pendingUploads.size === 0) {
+              window.clearInterval(t);
+              resolve();
+            }
+          }, 300);
+        });
 
-      async function insertImageFile(file: File) {
-        setStatus(`正在上传图片 ${file.name}…`);
+      // 本地压缩：最长边 1920、JPEG 0.85；GIF 与小于 150KB 的图原样上传
+      async function prepareImage(file: File): Promise<{ blob: Blob; ext: string; note: string }> {
+        const origExt = (file.name.split('.').pop() || 'png').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'png';
+        if (file.type === 'image/gif' || file.size < 150 * 1024) return { blob: file, ext: origExt, note: '' };
         try {
-          const repoPath = await uploadAsset(file, 'images');
-          // raw 地址在提交后立即可见；写入正文时用站点路径（turndown 依据 data-repopath 生成）
-          const html = `<img src="${RAW}/public${repoPath}" data-repopath="${repoPath}" alt="${file.name.replace(/\.[^.]+$/, '')}" />`;
-          editor.focus();
-          document.execCommand('insertHTML', false, html);
-          setStatus('图片已上传并插入。', 'ok');
-        } catch (e) {
-          setStatus(`图片上传失败：${(e as Error).message}`, 'err');
+          const bmp = await createImageBitmap(file);
+          const MAX = 1920;
+          let w = bmp.width;
+          let h = bmp.height;
+          if (w > MAX || h > MAX) {
+            if (w >= h) { h = Math.round((h * MAX) / w); w = MAX; }
+            else { w = Math.round((w * MAX) / h); h = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d')!.drawImage(bmp, 0, 0, w, h);
+          bmp.close();
+          const jpg: Blob = await new Promise((res, rej) =>
+            canvas.toBlob((b) => (b ? res(b) : rej(new Error('压缩失败'))), 'image/jpeg', 0.85),
+          );
+          if (jpg.size < file.size) {
+            return { blob: jpg, ext: 'jpg', note: `${Math.round(file.size / 1024)}KB→${Math.round(jpg.size / 1024)}KB` };
+          }
+          return { blob: file, ext: origExt, note: '' };
+        } catch {
+          return { blob: file, ext: origExt, note: '' };
         }
       }
 
-      // 直接 Ctrl+V 粘贴图片
+      async function uploadAsset(blob: Blob, dir: string, ext: string): Promise<string> {
+        const token = localStorage.getItem(TOKEN_KEY)!;
+        const repoPath = `/${dir}/${Date.now()}-${Math.floor(Math.random() * 1e4)}.${ext}`;
+        const b64 = await fileToBase64(blob);
+        await githubPut(`public${repoPath}`, `上传图片 ${dir}`, b64, token);
+        return repoPath; // 如 /images/123.jpg
+      }
+
+      async function insertImageFile(rawFile: File) {
+        if (!localStorage.getItem(TOKEN_KEY)) {
+          alert('插图需要先导入密钥');
+          publishMode = true;
+          openModal();
+          return;
+        }
+        const prepared = await prepareImage(rawFile);
+        const id = Date.now() + Math.random();
+        pendingUploads.add(id);
+        // 不等网络：先用本地地址把图显示出来
+        const localUrl = URL.createObjectURL(prepared.blob);
+        editor.focus();
+        document.execCommand('insertHTML', false, `<img class="img-uploading" src="${localUrl}" alt="" />`);
+        const img = Array.from(editor.querySelectorAll<HTMLImageElement>('img.img-uploading')).pop();
+        setStatus(`图片已显示，后台上传中…${prepared.note ? `（压缩 ${prepared.note}）` : ''}`);
+        try {
+          const repoPath = await uploadAsset(prepared.blob, 'images', prepared.ext);
+          if (img) {
+            img.setAttribute('data-repopath', repoPath);
+            img.classList.remove('img-uploading');
+          }
+          setStatus('图片上传完成。', 'ok');
+        } catch (e) {
+          if (img) {
+            img.classList.remove('img-uploading');
+            img.classList.add('img-failed');
+            img.title = `上传失败：${(e as Error).message}`;
+          }
+          setStatus(`有一张图片上传失败（红框标记）：${(e as Error).message}。请删掉它重新粘贴。`, 'err');
+        } finally {
+          pendingUploads.delete(id);
+        }
+      }
+
+      // 粘贴：图片走上传；从网页/Word 复制的文字一律只保留纯文本，适配编辑器格式
       editor.addEventListener('paste', (e) => {
         const items = e.clipboardData?.items;
-        if (!items) return;
-        for (const item of items) {
-          if (item.type.startsWith('image/')) {
-            const file = item.getAsFile();
-            if (file) {
-              e.preventDefault();
-              if (!localStorage.getItem(TOKEN_KEY)) {
-                alert('粘贴图片需要先导入密钥');
-                publishMode = true;
-                openModal();
-                return;
-              }
-              insertImageFile(file);
-              return;
+        let imageFile: File | null = null;
+        if (items) {
+          for (const item of items) {
+            if (item.type.startsWith('image/')) {
+              imageFile = item.getAsFile();
+              break;
             }
           }
+        }
+        if (imageFile) {
+          e.preventDefault();
+          insertImageFile(imageFile);
+          return;
+        }
+        const text = e.clipboardData?.getData('text/plain') ?? '';
+        if (text) {
+          e.preventDefault();
+          editor.focus();
+          document.execCommand('insertText', false, text);
+        }
+      });
+
+      // 也支持直接把图片文件拖进编辑区
+      editor.addEventListener('dragover', (e) => e.preventDefault());
+      editor.addEventListener('drop', (e) => {
+        const f = e.dataTransfer?.files?.[0];
+        if (f && f.type.startsWith('image/')) {
+          e.preventDefault();
+          insertImageFile(f);
+        }
+      });
+
+      // Ctrl+Y / Ctrl+Shift+Z 重做（Ctrl+Z 撤销由浏览器原生支持）
+      editor.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const k = e.key.toLowerCase();
+        if (k === 'y' || (e.shiftKey && k === 'z')) {
+          e.preventDefault();
+          exec('redo');
         }
       });
 
       coverFileInput.addEventListener('change', async () => {
         const file = coverFileInput.files?.[0];
         if (!file) return;
-        setStatus('正在上传封面…');
-        try {
-          const repoPath = await uploadAsset(file, 'covers');
-          coverPath = repoPath;
-          showCover(`${RAW}/public${repoPath}`);
-          setStatus('封面已上传。', 'ok');
-        } catch (e) {
-          setStatus(`封面上传失败：${(e as Error).message}`, 'err');
+        if (!localStorage.getItem(TOKEN_KEY)) {
+          publishMode = true;
+          openModal();
+          coverFileInput.value = '';
+          return;
         }
-        coverFileInput.value = '';
+        const prepared = await prepareImage(file);
+        const localUrl = URL.createObjectURL(prepared.blob);
+        coverPath = '';
+        showCover(localUrl);
+        const id = Date.now() + Math.random();
+        pendingUploads.add(id);
+        setStatus(`封面已显示，后台上传中…${prepared.note ? `（压缩 ${prepared.note}）` : ''}`);
+        try {
+          const repoPath = await uploadAsset(prepared.blob, 'covers', prepared.ext);
+          coverPath = repoPath;
+          setStatus('封面上传完成。', 'ok');
+        } catch (e) {
+          hideCover();
+          setStatus(`封面上传失败：${(e as Error).message}`, 'err');
+        } finally {
+          pendingUploads.delete(id);
+          coverFileInput.value = '';
+        }
       });
 
       // ---------- 导入 Markdown ----------
@@ -549,7 +706,7 @@ import { withBase } from '../../utils/url';
           throw new Error('网络中断，且无法确认提交是否成功，请稍后到“管理文章”核对');
         }
       }
-      const fileToBase64 = (file: File) =>
+      const fileToBase64 = (file: Blob) =>
         new Promise<string>((resolve, reject) => {
           const r = new FileReader();
           r.onload = () => resolve((r.result as string).split(',')[1]);
@@ -594,6 +751,38 @@ import { withBase } from '../../utils/url';
           .catch(() => {});
       }
 
+      // ---------- 预览：按发布后的文章样式渲染 ----------
+      const previewModal = $('preview-modal');
+      const pvBody = $('pv-body');
+      function openPreview() {
+        $('pv-title').textContent = titleEl.value.trim() || '未命名文章';
+        const dateText = dateEl.value ? dateEl.value.replace('T', ' ') : '';
+        $('pv-meta').textContent =
+          [dateText, tags.length ? tags.join('、') : '', draftEl.checked ? '隐藏文章' : ''].filter(Boolean).join(' · ');
+        const pvCover = $<HTMLImageElement>('pv-cover');
+        if (coverPath || !coverPreview.classList.contains('hidden')) {
+          pvCover.src = coverImg.src;
+          pvCover.classList.remove('hidden');
+        } else {
+          pvCover.classList.add('hidden');
+        }
+        pvBody.innerHTML = marked.parse(turndown.turndown(editor.innerHTML)) as string;
+        previewModal.classList.remove('hidden');
+        previewModal.classList.add('flex');
+      }
+      const closePreview = () => {
+        previewModal.classList.add('hidden');
+        previewModal.classList.remove('flex');
+      };
+      $('btn-preview').addEventListener('click', openPreview);
+      $('pv-close').addEventListener('click', closePreview);
+      previewModal.addEventListener('click', (e) => {
+        if (e.target === previewModal) closePreview();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !previewModal.classList.contains('hidden')) closePreview();
+      });
+
       // ---------- 加载已有文章（编辑模式） ----------
       async function loadExisting(slug: string) {
         setStatus('正在加载文章…');
@@ -632,6 +821,10 @@ import { withBase } from '../../utils/url';
         if (!title) return alert('请填写标题');
         if (!text && !editor.querySelector('img')) return alert('请填写正文内容');
         if (!localStorage.getItem(TOKEN_KEY)) { publishMode = true; openModal(); return; }
+        if (editor.querySelector('img.img-failed')) {
+          return alert('有图片上传失败（红框标记），请删除后重新插入再发布');
+        }
+        await waitForUploads();
 
         const slug = (slugEl.value.trim() || sessionSlug || autoSlug()).replace(/^\/+|\/+$/g, '');
         sessionSlug = slug;

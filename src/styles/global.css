@@ -58,5 +58,5 @@ body {
 }
 
 .prose-custom img {
-  @apply rounded-lg;
+  @apply block h-auto max-w-full rounded-lg;
 }
