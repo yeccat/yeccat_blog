@@ -28,21 +28,26 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 22
 
       - name: Configure GitHub Pages
         id: pages
         uses: actions/configure-pages@v5
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
+
+      - name: Debug env
+        run: |
+          echo "ASTRO_SITE=${{ steps.pages.outputs.origin }}"
+          echo "ASTRO_BASE=${{ steps.pages.outputs.base_path }}/"
+          ls node_modules/.bin/astro || echo "astro not found"
+          node --version
+          npm --version
 
       - name: Build with Astro
         run: npm run build
         env:
-          # configure-pages 会自动检测 base 路径
-          # 传入 Astro 以正确生成带子路径的 URL
           ASTRO_SITE: ${{ steps.pages.outputs.origin }}
           ASTRO_BASE: ${{ steps.pages.outputs.base_path }}/
 
